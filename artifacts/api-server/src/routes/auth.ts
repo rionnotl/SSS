@@ -1,10 +1,8 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import db from "../lib/sqlite";
-import {
-  RegisterBody,
-  LoginBody,
-} from "@workspace/api-zod";
+import { RegisterBody, LoginBody } from "@workspace/api-zod";
+import { authRateLimiter } from "../middleware/rateLimiter";
 
 const router: IRouter = Router();
 
@@ -14,7 +12,9 @@ router.get("/auth/me", (req, res): void => {
     res.status(401).json({ error: "未ログインです" });
     return;
   }
-  const user = db.prepare("SELECT id, username, bio, created_at as createdAt FROM users WHERE id = ?").get(session.userId) as any;
+  const user = db
+    .prepare("SELECT id, username, bio, created_at as createdAt FROM users WHERE id = ?")
+    .get(session.userId) as any;
   if (!user) {
     session.destroy(() => {});
     res.status(401).json({ error: "ユーザーが見つかりません" });
@@ -23,7 +23,7 @@ router.get("/auth/me", (req, res): void => {
   res.json(user);
 });
 
-router.post("/auth/register", async (req, res): Promise<void> => {
+router.post("/auth/register", authRateLimiter, async (req, res): Promise<void> => {
   const parsed = RegisterBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -38,9 +38,11 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     return;
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password, 12);
 
-  const stmt = db.prepare("INSERT INTO users (username, password_hash) VALUES (?, ?) RETURNING id, username, bio, created_at as createdAt");
+  const stmt = db.prepare(
+    "INSERT INTO users (username, password_hash) VALUES (?, ?) RETURNING id, username, bio, created_at as createdAt",
+  );
   const user = stmt.get(username, passwordHash) as any;
 
   const session = req.session as any;
@@ -49,7 +51,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   res.status(201).json(user);
 });
 
-router.post("/auth/login", async (req, res): Promise<void> => {
+router.post("/auth/login", authRateLimiter, async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -58,7 +60,11 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   const { username, password } = parsed.data;
 
-  const row = db.prepare("SELECT id, username, bio, password_hash, created_at as createdAt FROM users WHERE username = ?").get(username) as any;
+  const row = db
+    .prepare(
+      "SELECT id, username, bio, password_hash, created_at as createdAt FROM users WHERE username = ?",
+    )
+    .get(username) as any;
   if (!row) {
     res.status(401).json({ error: "ユーザー名またはパスワードが間違っています" });
     return;
@@ -73,7 +79,12 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   const session = req.session as any;
   session.userId = row.id;
 
-  res.json({ id: row.id, username: row.username, bio: row.bio ?? null, createdAt: row.createdAt });
+  res.json({
+    id: row.id,
+    username: row.username,
+    bio: row.bio ?? null,
+    createdAt: row.createdAt,
+  });
 });
 
 router.post("/auth/logout", (req, res): void => {

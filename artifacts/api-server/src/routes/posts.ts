@@ -10,8 +10,17 @@ import {
 
 const router: IRouter = Router();
 
-function getPostsWithLikes(userId: number | null, where: string, params: any[], orderLimit: string): any[] {
-  const rows = db.prepare(`
+function getPostsWithLikes(
+  userId: number | null,
+  where: string,
+  whereParams: unknown[],
+  limit: number,
+  offset: number,
+): any[] {
+  const uid = userId ?? 0;
+  const rows = db
+    .prepare(
+      `
     SELECT
       p.id,
       p.user_id as userId,
@@ -24,14 +33,17 @@ function getPostsWithLikes(userId: number | null, where: string, params: any[], 
       p.mood_tag as moodTag,
       p.created_at as createdAt,
       COUNT(l.id) as likesCount,
-      ${userId ? `MAX(CASE WHEN l.user_id = ${userId} THEN 1 ELSE 0 END)` : "0"} as likedByMe
+      MAX(CASE WHEN l.user_id = ? THEN 1 ELSE 0 END) as likedByMe
     FROM posts p
     JOIN users u ON u.id = p.user_id
     LEFT JOIN likes l ON l.post_id = p.id
     ${where}
     GROUP BY p.id
-    ${orderLimit}
-  `).all(...params) as any[];
+    ORDER BY p.created_at DESC
+    LIMIT ? OFFSET ?
+  `,
+    )
+    .all(uid, ...whereParams, limit, offset) as any[];
 
   return rows.map((r) => ({
     ...r,
@@ -50,7 +62,7 @@ router.get("/posts", (req, res): void => {
   const session = req.session as any;
   const userId = session.userId ?? null;
 
-  const posts = getPostsWithLikes(userId, "", [], `ORDER BY p.created_at DESC LIMIT ${limit} OFFSET ${offset}`);
+  const posts = getPostsWithLikes(userId, "", [], limit, offset);
   res.json(posts);
 });
 
@@ -74,9 +86,17 @@ router.post("/posts", (req, res): void => {
     VALUES (?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `);
-  const result = stmt.get(session.userId, songTitle, artistName, sourceType, sourceUrl ?? null, message ?? null, moodTag ?? null) as any;
+  const result = stmt.get(
+    session.userId,
+    songTitle,
+    artistName,
+    sourceType,
+    sourceUrl ?? null,
+    message ?? null,
+    moodTag ?? null,
+  ) as any;
 
-  const posts = getPostsWithLikes(session.userId, "WHERE p.id = ?", [result.id], "");
+  const posts = getPostsWithLikes(session.userId, "WHERE p.id = ?", [result.id], 1, 0);
   if (!posts[0]) {
     res.status(500).json({ error: "投稿の作成に失敗しました" });
     return;
@@ -127,9 +147,14 @@ router.post("/posts/:id/like", (req, res): void => {
     return;
   }
 
-  db.prepare("INSERT OR IGNORE INTO likes (user_id, post_id) VALUES (?, ?)").run(session.userId, parsed.data.id);
+  db.prepare("INSERT OR IGNORE INTO likes (user_id, post_id) VALUES (?, ?)").run(
+    session.userId,
+    parsed.data.id,
+  );
 
-  const result = db.prepare("SELECT COUNT(*) as count FROM likes WHERE post_id = ?").get(parsed.data.id) as any;
+  const result = db
+    .prepare("SELECT COUNT(*) as count FROM likes WHERE post_id = ?")
+    .get(parsed.data.id) as any;
   res.json({ likesCount: Number(result.count), likedByMe: true });
 });
 
@@ -147,9 +172,14 @@ router.delete("/posts/:id/like", (req, res): void => {
     return;
   }
 
-  db.prepare("DELETE FROM likes WHERE user_id = ? AND post_id = ?").run(session.userId, parsed.data.id);
+  db.prepare("DELETE FROM likes WHERE user_id = ? AND post_id = ?").run(
+    session.userId,
+    parsed.data.id,
+  );
 
-  const result = db.prepare("SELECT COUNT(*) as count FROM likes WHERE post_id = ?").get(parsed.data.id) as any;
+  const result = db
+    .prepare("SELECT COUNT(*) as count FROM likes WHERE post_id = ?")
+    .get(parsed.data.id) as any;
   res.json({ likesCount: Number(result.count), likedByMe: false });
 });
 

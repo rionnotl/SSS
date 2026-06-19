@@ -1,15 +1,44 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import pinoHttp from "pino-http";
 import session from "express-session";
 import router from "./routes";
+import { csrfRouter, csrfProtection } from "./middleware/csrf";
 import { logger } from "./lib/logger";
 
 if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET environment variable is required but was not provided.");
 }
 
+const isProd = process.env.NODE_ENV === "production";
+
+function getAllowedOrigins(): string[] | true {
+  if (!isProd) return true;
+  const domains = process.env.REPLIT_DOMAINS;
+  if (!domains) return true;
+  return domains.split(",").map((d) => `https://${d.trim()}`);
+}
+
 const app: Express = express();
+
+app.set("trust proxy", 1);
+
+app.use(
+  helmet({
+    crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        frameSrc: ["https://www.youtube.com", "https://open.spotify.com"],
+        connectSrc: ["'self'"],
+      },
+    },
+  }),
+);
 
 app.use(
   pinoHttp({
@@ -31,12 +60,15 @@ app.use(
   }),
 );
 
-app.use(cors({
-  origin: true,
-  credentials: true,
-}));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(
+  cors({
+    origin: getAllowedOrigins(),
+    credentials: true,
+  }),
+);
+
+app.use(express.json({ limit: "64kb" }));
+app.use(express.urlencoded({ extended: true, limit: "64kb" }));
 
 app.use(
   session({
@@ -45,13 +77,15 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isProd,
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      sameSite: "lax",
     },
   }),
 );
 
+app.use("/api", csrfRouter);
+app.use("/api", csrfProtection);
 app.use("/api", router);
 
 export default app;

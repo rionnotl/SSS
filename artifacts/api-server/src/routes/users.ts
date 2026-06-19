@@ -5,15 +5,21 @@ import { UpdateBioBody } from "@workspace/api-zod";
 const router: IRouter = Router();
 
 router.get("/users/:username", (req, res): void => {
-  const username = Array.isArray(req.params.username) ? req.params.username[0] : req.params.username;
+  const username = Array.isArray(req.params.username)
+    ? req.params.username[0]
+    : req.params.username;
 
-  const user = db.prepare("SELECT id, username, bio, created_at as createdAt FROM users WHERE username = ?").get(username) as any;
+  const user = db
+    .prepare("SELECT id, username, bio, created_at as createdAt FROM users WHERE username = ?")
+    .get(username) as any;
   if (!user) {
     res.status(404).json({ error: "ユーザーが見つかりません" });
     return;
   }
 
-  const countRow = db.prepare("SELECT COUNT(*) as count FROM posts WHERE user_id = ?").get(user.id) as any;
+  const countRow = db
+    .prepare("SELECT COUNT(*) as count FROM posts WHERE user_id = ?")
+    .get(user.id) as any;
 
   res.json({
     id: user.id,
@@ -31,7 +37,9 @@ router.patch("/users/:username/bio", (req, res): void => {
     return;
   }
 
-  const username = Array.isArray(req.params.username) ? req.params.username[0] : req.params.username;
+  const username = Array.isArray(req.params.username)
+    ? req.params.username[0]
+    : req.params.username;
   const targetUser = db.prepare("SELECT id FROM users WHERE username = ?").get(username) as any;
 
   if (!targetUser || targetUser.id !== session.userId) {
@@ -45,14 +53,20 @@ router.patch("/users/:username/bio", (req, res): void => {
     return;
   }
 
-  const updated = db.prepare("UPDATE users SET bio = ? WHERE id = ? RETURNING id, username, bio, created_at as createdAt").get(parsed.data.bio, session.userId) as any;
+  const updated = db
+    .prepare(
+      "UPDATE users SET bio = ? WHERE id = ? RETURNING id, username, bio, created_at as createdAt",
+    )
+    .get(parsed.data.bio, session.userId) as any;
   res.json({ ...updated, bio: updated.bio ?? null });
 });
 
 router.get("/users/:username/posts", (req, res): void => {
-  const username = Array.isArray(req.params.username) ? req.params.username[0] : req.params.username;
+  const username = Array.isArray(req.params.username)
+    ? req.params.username[0]
+    : req.params.username;
   const session = req.session as any;
-  const currentUserId = session.userId ?? null;
+  const currentUserId: number = session.userId ?? 0;
 
   const user = db.prepare("SELECT id FROM users WHERE username = ?").get(username) as any;
   if (!user) {
@@ -60,7 +74,9 @@ router.get("/users/:username/posts", (req, res): void => {
     return;
   }
 
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT
       p.id,
       p.user_id as userId,
@@ -73,23 +89,27 @@ router.get("/users/:username/posts", (req, res): void => {
       p.mood_tag as moodTag,
       p.created_at as createdAt,
       COUNT(l.id) as likesCount,
-      ${currentUserId ? `MAX(CASE WHEN l.user_id = ${currentUserId} THEN 1 ELSE 0 END)` : "0"} as likedByMe
+      MAX(CASE WHEN l.user_id = ? THEN 1 ELSE 0 END) as likedByMe
     FROM posts p
     JOIN users u ON u.id = p.user_id
     LEFT JOIN likes l ON l.post_id = p.id
     WHERE p.user_id = ?
     GROUP BY p.id
     ORDER BY p.created_at DESC
-  `).all(user.id) as any[];
+  `,
+    )
+    .all(currentUserId, user.id) as any[];
 
-  res.json(rows.map((r) => ({
-    ...r,
-    likesCount: Number(r.likesCount),
-    likedByMe: Boolean(r.likedByMe),
-    sourceUrl: r.sourceUrl ?? null,
-    message: r.message ?? null,
-    moodTag: r.moodTag ?? null,
-  })));
+  res.json(
+    rows.map((r) => ({
+      ...r,
+      likesCount: Number(r.likesCount),
+      likedByMe: Boolean(r.likedByMe),
+      sourceUrl: r.sourceUrl ?? null,
+      message: r.message ?? null,
+      moodTag: r.moodTag ?? null,
+    })),
+  );
 });
 
 export default router;
