@@ -1,3 +1,4 @@
+import { createRequire } from "module";
 import express, { type Express } from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -6,6 +7,13 @@ import session from "express-session";
 import router from "./routes";
 import { csrfRouter, csrfProtection } from "./middleware/csrf";
 import { logger } from "./lib/logger";
+import db from "./lib/sqlite";
+
+const require = createRequire(import.meta.url);
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const SqliteStoreFactory = require("better-sqlite3-session-store") as (
+  dep: { Store: typeof session.Store },
+) => new (options: { client: typeof db; expired?: { clear?: boolean; intervalMs?: number } }) => session.Store;
 
 if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET environment variable is required but was not provided.");
@@ -19,6 +27,8 @@ function getAllowedOrigins(): string[] | true {
   if (!domains) return true;
   return domains.split(",").map((d) => `https://${d.trim()}`);
 }
+
+const SqliteStore = SqliteStoreFactory(session);
 
 const app: Express = express();
 
@@ -75,6 +85,13 @@ app.use(
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    store: new SqliteStore({
+      client: db,
+      expired: {
+        clear: true,
+        intervalMs: 15 * 60 * 1000,
+      },
+    }),
     cookie: {
       httpOnly: true,
       secure: isProd,
