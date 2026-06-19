@@ -105,4 +105,14 @@ app.use("/api", csrfRouter);
 app.use("/api", csrfProtection);
 app.use("/api", router);
 
+import path from "path";
+import { fileURLToPath } from "url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendPath = path.join(__dirname, "../../music-sns/dist");
+app.use(express.static(frontendPath));
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(frontendPath, "index.html"));
+});
+
 export default app;
