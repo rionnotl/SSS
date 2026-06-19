@@ -1,44 +1,62 @@
-# [Project name]
+# 音楽SNS
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A Japanese music-sharing social network where users post and discover songs they love — with support for Spotify links, YouTube links, or manual text entry.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080)
+- `pnpm --filter @workspace/music-sns run dev` — run the frontend (port 24850)
 - `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required env: `SESSION_SECRET` — secret for express-session (already set)
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
+- API: Express 5 + better-sqlite3 (SQLite) + express-session + bcryptjs
+- Frontend: React + Vite + Tailwind CSS v4 + shadcn/ui + TanStack Query + wouter
+- Validation: Zod (`zod/v4`)
 - API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (CJS bundle)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `lib/api-spec/openapi.yaml` — API contract (source of truth)
+- `lib/api-client-react/src/generated/` — generated React Query hooks
+- `lib/api-zod/src/generated/` — generated Zod schemas for server validation
+- `artifacts/api-server/src/` — Express backend
+- `artifacts/api-server/src/lib/sqlite.ts` — SQLite setup + schema + seed data
+- `artifacts/api-server/src/routes/` — auth, posts, users, stats route handlers
+- `artifacts/api-server/data/music.db` — SQLite database file
+- `artifacts/music-sns/src/` — React frontend
+- `artifacts/music-sns/src/pages/` — timeline, login, register, profile pages
+- `artifacts/music-sns/src/components/` — PostCard, CreatePostModal, Layout, NavBar, etc.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- SQLite via better-sqlite3 instead of PostgreSQL — simpler setup, no DATABASE_URL needed, fast for this use case
+- Session-based auth (express-session, memory store) — username + password only, no email
+- bcryptjs for password hashing
+- Dark theme forced always (no light mode toggle) — `dark` class added in main.tsx
+- API is contract-first: OpenAPI spec → codegen → typed hooks used everywhere
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- **タイムライン**: Scrolling feed of all users' song posts, newest first, with trending mood tags
+- **投稿作成**: Floating compose button opens a sheet to post songs via YouTube/Spotify URL or manual entry, with optional mood tags (#感動 #テンション上がる etc.) and a 140-char message
+- **プロフィール**: Per-user profile page with bio editing, post count, and all their posts
+- **認証**: Username + password registration and login, session-based
 
-## User preferences
+## Seed data
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+3 demo users seeded with password `password123`:
+- `haru_music`, `neon_beats`, `sakura_tunes`
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- `better-sqlite3` requires the `onlyBuiltDependencies` entry in `pnpm-workspace.yaml` to compile its native addon
+- Session cookies use `sameSite: "lax"` in dev and `"none"` in production (required for cross-origin proxy setup)
+- `dark` variant in Tailwind v4 cannot be used with `@apply` — set `document.documentElement.classList.add("dark")` in main.tsx instead
 
 ## Pointers
 
