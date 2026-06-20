@@ -109,7 +109,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const frontendPath = path.join(__dirname, "../../music-sns/dist");
+const frontendPath = path.join(__dirname, "../../music-sns/dist/public");
 app.use(express.static(frontendPath));
 app.get("/{*splat}", (_req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
